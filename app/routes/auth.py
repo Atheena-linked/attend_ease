@@ -8,8 +8,7 @@ from datetime import datetime, timedelta
 router = APIRouter()
 
 # Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
 # JWT settings
 SECRET_KEY = "attendease_secret_key"
 ALGORITHM = "HS256"

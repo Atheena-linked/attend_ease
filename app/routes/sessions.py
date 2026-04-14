@@ -1,70 +1,69 @@
-from fastapi import APIRouter, HTTPException
-from app.database import users_collection
-from app.models import UserRegister, UserLogin
-from passlib.context import CryptContext
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from app.database import sessions_collection
+from app.models import SessionCreate
 from jose import jwt
-from datetime import datetime, timedelta
+from datetime import datetime
+from bson import ObjectId
 
 router = APIRouter()
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# JWT settings
 SECRET_KEY = "attendease_secret_key"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
+security = HTTPBearer()
 
-def hash_password(password: str):
-    return pwd_context.hash(password)
+def decode_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-def verify_password(plain, hashed):
-    return pwd_context.verify(plain, hashed)
-
-def create_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-@router.post("/register")
-async def register(user: UserRegister):
-    # Check if email already exists
-    existing = await users_collection.find_one({"email": user.email})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+@router.post("/create")
+async def create_session(session: SessionCreate, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    user = decode_token(token)
     
-    # Hash password and save
-    hashed = hash_password(user.password)
-    new_user = {
-        "name": user.name,
-        "email": user.email,
-        "password": hashed,
-        "role": user.role
+    if user["role"] != "faculty":
+        raise HTTPException(status_code=403, detail="Only faculty can create sessions")
+    
+    new_session = {
+        "subject": session.subject,
+        "room": session.room,
+        "faculty_id": user["id"],
+        "faculty_name": user["name"],
+        "active": True,
+        "created_at": datetime.utcnow()
     }
-    await users_collection.insert_one(new_user)
-    return {"message": "User registered successfully"}
-
-@router.post("/login")
-async def login(user: UserLogin):
-    # Find user
-    db_user = await users_collection.find_one({"email": user.email})
-    if not db_user:
-        raise HTTPException(status_code=400, detail="User not found")
-    
-    # Check password
-    if not verify_password(user.password, db_user["password"]):
-        raise HTTPException(status_code=400, detail="Incorrect password")
-    
-    # Create token
-    token = create_token({
-        "id": str(db_user["_id"]),
-        "email": db_user["email"],
-        "role": db_user["role"],
-        "name": db_user["name"]
-    })
+    result = await sessions_collection.insert_one(new_session)
     return {
-        "token": token,
-        "role": db_user["role"],
-        "name": db_user["name"]
+        "message": "Session created",
+        "session_id": str(result.inserted_id)
     }
+
+@router.get("/active")
+async def get_active_sessions():
+    sessions = []
+    async for session in sessions_collection.find({"active": True}):
+        sessions.append({
+            "session_id": str(session["_id"]),
+            "subject": session["subject"],
+            "room": session["room"],
+            "faculty_name": session["faculty_name"],
+            "created_at": str(session["created_at"])
+        })
+    return sessions
+
+@router.put("/close/{session_id}")
+async def close_session(session_id: str, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    user = decode_token(token)
+    
+    if user["role"] != "faculty":
+        raise HTTPException(status_code=403, detail="Only faculty can close sessions")
+    
+    await sessions_collection.update_one(
+        {"_id": ObjectId(session_id)},
+        {"$set": {"active": False}}
+    )
+    return {"message": "Session closed"}

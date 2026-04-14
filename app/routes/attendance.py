@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.database import attendance_collection, sessions_collection
 from app.models import AttendanceMark
 from jose import jwt
@@ -9,6 +10,7 @@ router = APIRouter()
 
 SECRET_KEY = "attendease_secret_key"
 ALGORITHM = "HS256"
+security = HTTPBearer()
 
 def decode_token(token: str):
     try:
@@ -18,8 +20,8 @@ def decode_token(token: str):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 @router.post("/mark")
-async def mark_attendance(data: AttendanceMark, authorization: str = Header(...)):
-    token = authorization.split(" ")[1]
+async def mark_attendance(data: AttendanceMark, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
     user = decode_token(token)
 
     # Check if session exists and is active
@@ -58,8 +60,8 @@ async def mark_attendance(data: AttendanceMark, authorization: str = Header(...)
     return {"message": "Attendance marked successfully"}
 
 @router.get("/session/{session_id}")
-async def get_session_attendance(session_id: str, authorization: str = Header(...)):
-    token = authorization.split(" ")[1]
+async def get_session_attendance(session_id: str, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
     user = decode_token(token)
 
     if user["role"] != "faculty":
@@ -77,8 +79,8 @@ async def get_session_attendance(session_id: str, authorization: str = Header(..
     return records
 
 @router.get("/mystatus/{session_id}")
-async def my_attendance_status(session_id: str, authorization: str = Header(...)):
-    token = authorization.split(" ")[1]
+async def my_attendance_status(session_id: str, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
     user = decode_token(token)
 
     record = await attendance_collection.find_one({
