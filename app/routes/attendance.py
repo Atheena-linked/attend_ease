@@ -31,7 +31,9 @@ async def mark_attendance(data: AttendanceMark, credentials: HTTPAuthorizationCr
     })
     if not session:
         raise HTTPException(status_code=404, detail="Session not found or inactive")
-
+    if data.beacon_id != session["beacon_id"]:
+        raise HTTPException(status_code=400, detail="Wrong classroom beacon")
+    
     # Check if already marked
     existing = await attendance_collection.find_one({
         "student_id": user["id"],
