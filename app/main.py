@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.routes import auth, sessions, attendance
 
 app = FastAPI(title="AttendEase API")
 
-# Allow frontend to talk to backend
+# ✅ 1. CORS (keep early)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,11 +14,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register routes
-app.include_router(auth.router, prefix="/auth", tags=["Auth"])
+# ✅ 2. REGISTER ROUTES FIRST (VERY IMPORTANT)
+app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(sessions.router, prefix="/sessions", tags=["Sessions"])
 app.include_router(attendance.router, prefix="/attendance", tags=["Attendance"])
 
-@app.get("/")
+# ✅ 3. STATIC FILES LAST (ONLY ONCE)
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+
+# Optional root check
+@app.get("/api")
 def read_root():
     return {"message": "AttendEase backend is running!"}
