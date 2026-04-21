@@ -16,10 +16,11 @@ class UserLogin(BaseModel):
 class SessionCreate(BaseModel):
     subject: str
     room: str
-
+    beacon_id: str  # UUID of the ESP32 beacon in this room
 # Attendance Models
 class AttendanceMark(BaseModel):
     session_id: str
+    beacon_id: str
     gps_verified: bool
     ble_verified: bool
     face_verified: bool
