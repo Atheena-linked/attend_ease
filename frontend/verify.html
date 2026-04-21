@@ -168,7 +168,9 @@
             </div>
             <span class="step-status text-pending" id="bleStatus">PENDING</span>
         </div>
-
+        
+        <!-- ✅ ADD BUTTON HERE -->
+        <button class="btn" onclick="scanBLE()">Scan Classroom BLE</button>
         <!-- Step 3: Face -->
         <div class="step" id="faceStep">
             <div class="step-icon pending" id="faceIcon">🙂</div>
@@ -192,88 +194,172 @@
         <div class="error-box" id="errorBox"></div>
     </div>
 
-    <script>
-        const API = "http://localhost:8000";
-        const token = localStorage.getItem('token') || 'demo-token';
-        const sessionId = localStorage.getItem('currentSession') || 'demo-session';
-        
-        let gpsVerified = false;
-        let bleVerified = false;
-        let faceVerified = false;
+  <script>
+console.log("Merged Script Loaded");
 
-        function updateStep(stepId, iconId, statusId, textId, state, message) {
-            const icon = document.getElementById(iconId);
-            const status = document.getElementById(statusId);
-            const text = document.getElementById(textId);
+// CONFIG
+const API = "http://localhost:8000";
+const token = localStorage.getItem('token') || 'demo-token';
+const sessionId = localStorage.getItem('currentSession') || 'demo-session';
 
-            icon.className = `step-icon ${state}`;
-            status.className = `step-status text-${state}`;
-            status.textContent = state.toUpperCase();
-            text.textContent = message;
-        }
+// FLAGS
+let gpsVerified = false;
+let bleVerified = false;
+let faceVerified = false;
+let detectedBeacon = null;
 
-        async function startVerification() {
-            // Step 1 - GPS Check (mocked)
-            updateStep('gpsStep', 'gpsIcon', 'gpsStatus', 'gpsText', 'checking', 'Checking location...');
-            await sleep(1500);
-            gpsVerified = true;
-            updateStep('gpsStep', 'gpsIcon', 'gpsStatus', 'gpsText', 'verified', 'On campus ✓');
-
-            // Step 2 - BLE Check (mocked)
-            updateStep('bleStep', 'bleIcon', 'bleStatus', 'bleText', 'checking', 'Scanning for classroom beacon...');
-            await sleep(1500);
-            bleVerified = true;
-            updateStep('bleStep', 'bleIcon', 'bleStatus', 'bleText', 'verified', 'Beacon found ✓');
-
-            // Step 3 - Face Check
-            updateStep('faceStep', 'faceIcon', 'faceStatus', 'faceText', 'checking', 'Opening camera...');
-            await sleep(500);
-            openCamera();
-        }
-
-        function sleep(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
-        }
-
-        async function openCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                document.getElementById('video').srcObject = stream;
-                document.getElementById('cameraSection').style.display = 'block';
-                updateStep('faceStep', 'faceIcon', 'faceStatus', 'faceText', 'checking', 'Look at the camera and click verify');
-            } catch (err) {
-                updateStep('faceStep', 'faceIcon', 'faceStatus', 'faceText', 'verified', 'Camera skipped ✓');
-                faceVerified = true;
-                await submitAttendance();
-            }
-        }
-
-        async function verifyFace() {
-            document.getElementById('verifyBtn').disabled = true;
-            document.getElementById('verifyBtn').textContent = 'Verifying...';
-
-            await sleep(1500);
-
-            // Stop camera
-            const video = document.getElementById('video');
-            const stream = video.srcObject;
-            if (stream) stream.getTracks().forEach(track => track.stop());
-            document.getElementById('cameraSection').style.display = 'none';
-
-            faceVerified = true;
-            updateStep('faceStep', 'faceIcon', 'faceStatus', 'faceText', 'verified', 'Identity confirmed ✓');
-
-            await submitAttendance();
-        }
-
-        async function submitAttendance() {
-    document.getElementById('successBox').style.display = 'block';
-    await sleep(2000);
-    window.location.href = 'student.html';
+// UI update
+function updateStep(iconId, statusId, textId, state, message) {
+    document.getElementById(iconId).className = `step-icon ${state}`;
+    document.getElementById(statusId).className = `step-status text-${state}`;
+    document.getElementById(statusId).textContent = state.toUpperCase();
+    document.getElementById(textId).textContent = message;
 }
 
-        // Start verification automatically
-        startVerification();
-    </script>
-</body>
-</html>
+// Sleep helper
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+//////////////////////////////////////////
+// 🚀 START VERIFICATION (GPS FIRST)
+//////////////////////////////////////////
+async function startVerification() {
+    // STEP 1 - GPS (Demo)
+    updateStep('gpsIcon','gpsStatus','gpsText','checking','Checking location...');
+    await sleep(1500);
+
+    gpsVerified = true;
+    updateStep('gpsIcon','gpsStatus','gpsText','verified','On campus ✓');
+
+    // Enable BLE step
+    updateStep('bleIcon','bleStatus','bleText','pending','Click to scan classroom BLE');
+}
+
+//////////////////////////////////////////
+// 🔥 BLE SCAN (USER CLICK)
+//////////////////////////////////////////
+async function scanBLE() {
+    console.log("BLE scan started");
+
+    updateStep('bleIcon','bleStatus','bleText','checking','Scanning for beacon...');
+
+    try {
+        const device = await navigator.bluetooth.requestDevice({
+            acceptAllDevices: true
+        });
+
+        detectedBeacon = device.name || "Unknown Device";
+        bleVerified = true;
+
+        updateStep('bleIcon','bleStatus','bleText','verified',
+            `Connected: ${detectedBeacon}`);
+
+        // Move to Face Verification
+        await sleep(500);
+        startFaceVerification();
+
+    } catch (err) {
+        console.error(err);
+        updateStep('bleIcon','bleStatus','bleText','failed',
+            'BLE failed or cancelled');
+    }
+}
+
+//////////////////////////////////////////
+// 🎥 FACE VERIFICATION
+//////////////////////////////////////////
+async function startFaceVerification() {
+    updateStep('faceIcon','faceStatus','faceText','checking','Opening camera...');
+
+    await sleep(500);
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+
+        document.getElementById('video').srcObject = stream;
+        document.getElementById('cameraSection').style.display = 'block';
+
+        updateStep('faceIcon','faceStatus','faceText','checking',
+            'Look at the camera and click verify');
+
+    } catch (err) {
+        console.error(err);
+
+        // If camera fails → still continue (demo)
+        faceVerified = true;
+        updateStep('faceIcon','faceStatus','faceText','verified','Camera skipped ✓');
+
+        await submitAttendance();
+    }
+}
+
+//////////////////////////////////////////
+// 👤 VERIFY FACE BUTTON
+//////////////////////////////////////////
+async function verifyFace() {
+    document.getElementById('verifyBtn').disabled = true;
+    document.getElementById('verifyBtn').textContent = 'Verifying...';
+
+    await sleep(1500);
+
+    // Stop camera
+    const video = document.getElementById('video');
+    const stream = video.srcObject;
+    if (stream) stream.getTracks().forEach(track => track.stop());
+
+    document.getElementById('cameraSection').style.display = 'none';
+
+    faceVerified = true;
+
+    updateStep('faceIcon','faceStatus','faceText','verified','Identity confirmed ✓');
+
+    await submitAttendance();
+}
+
+//////////////////////////////////////////
+// 📡 SUBMIT ATTENDANCE
+//////////////////////////////////////////
+async function submitAttendance() {
+    try {
+        const res = await fetch(`${API}/attendance/mark`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + token
+            },
+            body: JSON.stringify({
+                session_id: sessionId,
+                beacon_id: detectedBeacon,
+                gps_verified: gpsVerified,
+                ble_verified: bleVerified,
+                face_verified: faceVerified
+            })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            document.getElementById('successBox').style.display = 'block';
+
+            await sleep(2000);
+            window.location.href = 'student.html';
+
+        } else {
+            document.getElementById('errorBox').style.display = 'block';
+            document.getElementById('errorBox').innerText = data.detail;
+        }
+
+    } catch (err) {
+        document.getElementById('errorBox').style.display = 'block';
+        document.getElementById('errorBox').innerText = "Server error";
+    }
+}
+
+//////////////////////////////////////////
+// 🔥 INIT
+//////////////////////////////////////////
+window.onload = function() {
+    startVerification();
+};
+</script>
